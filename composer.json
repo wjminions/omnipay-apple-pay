@@ -1,0 +1,33 @@
+{
+  "name": "wjminions/omnipay-apple-pay",
+  "type": "library",
+  "description": "ApplePay gateway for Omnipay payment processing library",
+  "keywords": [
+    "apple",
+    "apple-pay",
+    "gateway",
+    "merchant",
+    "omnipay",
+    "pay",
+    "payment",
+    "purchase",
+    "苹果"
+  ],
+  "homepage": "https://github.com/wjminons/omnipay-apple-pay",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "wjminions",
+      "email": "wjminions@gmail.com",
+      "homepage": "https://github.com/wjminions/omnipay-apple-pay"
+    }
+  ],
+  "autoload": {
+    "psr-4": {
+      "Omnipay\\UnionPay\\": "src/"
+    }
+  },
+  "require": {
+    "omnipay/common": "~2.0"
+  }
+}
