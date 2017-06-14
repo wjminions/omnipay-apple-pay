@@ -11,6 +11,35 @@ use Omnipay\ApplePay\Helper;
  */
 class AppleCompletePurchaseRequest extends AbstractAppleRequest
 {
+    protected $sandboxEndpoint = 'https://sandbox.itunes.apple.com/';
+
+    protected $productionEndpoint = 'https://buy.itunes.apple.com/';
+
+    protected $methods = array (
+        'query' => 'verifyReceipt',
+    );
+
+
+    public function getEndpoint($type)
+    {
+        if ($this->getEnvironment() == 'production') {
+            return $this->productionEndpoint . $this->methods[$type];
+        } else {
+            return $this->sandboxEndpoint . $this->methods[$type];
+        }
+    }
+
+
+    public function getEnvironment()
+    {
+        return $this->getParameter('environment');
+    }
+
+
+    public function setEnvironment($value)
+    {
+        return $this->setParameter('environment', $value);
+    }
 
     /**
      * Get the raw data array for this message. The format of this varies from gateway to
@@ -36,18 +65,6 @@ class AppleCompletePurchaseRequest extends AbstractAppleRequest
     }
 
 
-    public function setCertDir($value)
-    {
-        $this->setParameter('certDir', $value);
-    }
-
-
-    public function getCertDir()
-    {
-        return $this->getParameter('certDir');
-    }
-
-
     public function getRequestParam($key)
     {
         $params = $this->getRequestParams();
@@ -68,7 +85,11 @@ class AppleCompletePurchaseRequest extends AbstractAppleRequest
      */
     public function sendData($data)
     {
-        $data['verify_success'] = Helper::verify($this->getRequestParams(), $this->getCertDir());
+        $url = $this->getEndpoint('query');
+
+        Helper::validateApplePay($data, $url);
+
+
         $data['is_paid']        = $data['verify_success'] && ($this->getRequestParam('respCode') == '00');
 
         return $this->response = new AppleCompletePurchaseResponse($this, $data);

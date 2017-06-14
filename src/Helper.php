@@ -7,153 +7,72 @@ namespace Omnipay\ApplePay;
  */
 class Helper
 {
-
-    public static function getCertId($certPath, $password)
+    /**
+     * 21000 App Store不能读取你提供的JSON对象
+     * 21002 receipt-data域的数据有问题
+     * 21003 receipt无法通过验证
+     * 21004 提供的shared secret不匹配你账号中的shared secret
+     * 21005 receipt服务器当前不可用
+     * 21006 receipt合法，但是订阅已过期。服务器接收到这个状态码时，receipt数据仍然会解码并一起发送
+     * 21007 receipt是Sandbox receipt，但却发送至生产系统的验证服务
+     * 21008 receipt是生产receipt，但却发送至Sandbox环境的验证服务
+     */
+    public static function sendHttpRequest($receipt_data, $url)
     {
-        $data = file_get_contents($certPath);
-        openssl_pkcs12_read($data, $certs, $password);
-        $x509data = $certs ['cert'];
-        openssl_x509_read($x509data);
-        $certData = openssl_x509_parse($x509data);
+        //小票信息
+        $POSTFIELDS = array("receipt-data" => $receipt_data);
+        $POSTFIELDS = json_encode($POSTFIELDS);
 
-        return $certData['serialNumber'];
-    }
-
-
-    public static function getParamsSignatureWithRSA($params, $certPath, $password)
-    {
-        $query = self::getStringToSign($params);
-
-        $params_sha1x16 = sha1($query, false);
-        $privateKey     = self::getPrivateKey($certPath, $password);
-        openssl_sign($params_sha1x16, $signature, $privateKey, OPENSSL_ALGO_SHA1);
-
-        return base64_encode($signature);
-    }
-
-
-    public static function getParamsSignatureWithMD5($params, $secret)
-    {
-        $query = self::getStringToSign($params);
-
-        $signature = md5($query . '&' . md5($secret));
-
-        return $signature;
-    }
-
-
-    protected static function getPrivateKey($certPath, $password)
-    {
-        $data = file_get_contents($certPath);
-        openssl_pkcs12_read($data, $certs, $password);
-
-        return $certs['pkey'];
-    }
-
-
-    public static function verify($params, $certDir)
-    {
-        $publicKey        = self::getPublicKeyByCertId($params['certId'], $certDir);
-        $requestSignature = $params ['signature'];
-        unset($params['signature']);
-        ksort($params);
-        $query = http_build_query($params);
-        $query = urldecode($query);
-        $signature     = base64_decode($requestSignature);
-        $paramsSha1x16 = sha1($query, false);
-        $isSuccess     = openssl_verify($paramsSha1x16, $signature, $publicKey, OPENSSL_ALGO_SHA1);
-        return (bool)$isSuccess;
-    }
-
-
-    public static function getPublicKeyByCertId($certId, $certDir)
-    {
-        $handle = opendir($certDir);
-        if ($handle) {
-            while ($file = readdir($handle)) {
-                //clearstatcache();
-                $filePath = rtrim($certDir, '/\\') . '/' . $file;
-                if (is_file($filePath) && self::endsWith($filePath, '.cer')) {
-                    if (self::getCertIdByCerPath($filePath) == $certId) {
-                        closedir($handle);
-
-                        return file_get_contents($filePath);
-                    }
-                }
-            }
-            throw new \Exception(sprintf('Can not find certId in certDir %s', $certDir));
-        } else {
-            throw new \Exception('certDir is not exists');
-        }
-
-    }
-
-
-    public static function endsWith($haystack, $needles)
-    {
-        foreach ((array) $needles as $needle) {
-            if ((string) $needle === substr($haystack, -strlen($needle))) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-
-    protected static function getCertIdByCerPath($certPath)
-    {
-        $x509data = file_get_contents($certPath);
-        openssl_x509_read($x509data);
-        $certData = openssl_x509_parse($x509data);
-
-        return $certData ['serialNumber'];
-    }
-
-
-    public static function sendHttpRequest($url, $params)
-    {
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url);
+        //简单的curl
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         curl_setopt($ch, CURLOPT_POST, 1);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-        curl_setopt($ch, CURLOPT_SSLVERSION, 3);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, array ('Content-type:application/x-www-form-urlencoded;charset=UTF-8'));
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($params));
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $POSTFIELDS);
         $result = curl_exec($ch);
         curl_close($ch);
-
         return $result;
     }
 
 
-    public static function filterData($data)
+    public static function validateApplePay($receipt_data, $url)
     {
-        $data = array_filter(
-            $data,
-            function ($v) {
-                return $v !== '';
-            }
-        );
 
-        return $data;
-    }
+        // 验证参数
+        if (strlen($receipt_data)<20){
+            $result=array(
+                'status'=>false,
+                'message'=>'非法参数'
+            );
+            return $result;
+        }
+        // 请求验证
+        $html = static::sendHttpRequest($receipt_data, $url);
+        $data = json_decode($html,true);
 
+        // 如果是沙盒数据 则验证沙盒模式
+        if($data['status']=='21007'){
+            // 请求验证
+            $html = static::sendHttpRequest($receipt_data, 'https://sandbox.itunes.apple.com/verifyReceipt');
+            $data = json_decode($html,true);
+            $data['sandbox'] = '1';
+        }
 
-    /**
-     * @param $params
-     *
-     * @return string
-     */
-    public static function getStringToSign($params)
-    {
-        ksort($params);
-        $query = http_build_query($params);
-        $query = urldecode($query);
+        if (isset($_GET['debug'])) {
+            exit(json_encode($data));
+        }
 
-        return $query;
+        // 判断是否购买成功
+        if(intval($data['status'])===0){
+            $result=array(
+                'status'=>true,
+                'message'=>'购买成功'
+            );
+        }else{
+            $result=array(
+                'status'=>false,
+                'message'=>'购买失败 status:'.$data['status']
+            );
+        }
+        return $result;
     }
 }

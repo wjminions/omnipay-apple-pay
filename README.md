@@ -38,7 +38,7 @@ The following gateways are provided by this package:
 
 ## Usage
 
-Sandbox Param can be found at: [UnionPay Developer Center](https://open.unionpay.com/ajweb/account/testPara)
+Sandbox Param can be found at: [Apple Pay Developer Center](https://open.unionpay.com/ajweb/account/testPara)
 
 ### Consume
 
